@@ -6,6 +6,7 @@
            (java.util.concurrent Executors))
   (:gen-class))
 
+;;Producer code
 (defn- create-producer
   "Creates a producer that can be used to send a message to Kafka"
   [brokers]
@@ -21,3 +22,40 @@
   [producer topic message]
   (let [data (KeyedMessage. topic nil message)]
     (.send producer data)))
+
+;;Consumer code
+(defrecord KafkaMessage [topic offset partition key value-bytes])
+
+(defn- create-consumer-config
+  "Returns a configuration for a Kafka client."
+  []
+  (let [props (Properties.)]
+    (doto props
+      (.put "zookeeper.connect" "127.0.0.1:2181")
+      (.put "group.id" "group1")
+      (.put "zookeeper.session.timeout.ms" "400")
+      (.put "zookeeper.sync.time.ms" "200")
+      (.put "auto.commit.interval.ms" "1000"))
+    (ConsumerConfig. props)))
+
+(defn- consume-messages
+  "Continually consume messages from Kafka topic and write message value to stdout."
+  [stream thread-num]
+  (let [it (.iterator ^KafkaStream stream)]
+    (println (str "Starting thread" thread-num))
+    (while (.hasNext it)
+      (as-> (.next it) msg
+        (KafkaMessage. (.topic msg) (.offset msg) (.partition msg) (.key msg) (.message
+                                                                               msg))
+        (println (str "Received on thread " thread-num ": " (String. (:value-bytes
+                                                                      msg)))))))
+  (println (str "Stopping thread " thread-num)))
+
+(defn- start-consumer-threads
+  "Start a thread for each stream."
+  [thread-pool kafka-streams]
+  (loop [streams kafka-streams
+         index   0]
+    (when (seq streams)
+      (.submit thread-pool (cast Callable #(consume-messages (first streams) index)))
+      (recur (rest streams) (inc index)))))
