@@ -59,3 +59,30 @@
     (when (seq streams)
       (.submit thread-pool (cast Callable #(consume-messages (first streams) index)))
       (recur (rest streams) (inc index)))))
+
+
+;;application code
+(defn -main
+  "Pull messages from a Kafka topic using the High Level Consumer"
+  [topic num-threads]
+  (let [consumer      (Consumer/createJavaConsumerConnector (create-consumer-config))
+        consumer-map  (.createMessageStreams consumer {topic (Integer/parseInt num-threads)})
+        kafka-streams (.get consumer-map topic)
+        thread-pool   (Executors/newFixedThreadPool (Integer/parseInt num-threads))
+        producer      (create-producer "127.0.0.1:9092")]
+
+    ;; Clean up on a SIGTERM or Ctrl-C
+    (.addShutdownHook (Runtime/getRuntime)
+                      (Thread. #(do (.shutdown consumer)
+                                    (.shutdown thread-pool))))
+
+    ;; Connect and start listening for messages on Kafka
+    (start-consumer-threads thread-pool kafka-streams)
+
+    ;; Send a random int to Kafka every 500 milliseconds
+    (loop []
+      (let [num (str (rand-int 1000))]
+        (println (str "Sending to Kafka topic " topic ": " num))
+        (send-to-producer producer topic num)
+        (Thread/sleep 500)
+        (recur)))))
