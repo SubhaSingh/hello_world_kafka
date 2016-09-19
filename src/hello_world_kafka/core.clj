@@ -6,7 +6,8 @@
            (java.util.concurrent Executors))
   (:gen-class))
 
-;;Producer code
+
+;; ---------- Producer ----------
 (defn- create-producer
   "Creates a producer that can be used to send a message to Kafka"
   [brokers]
@@ -23,7 +24,8 @@
   (let [data (KeyedMessage. topic nil message)]
     (.send producer data)))
 
-;;Consumer code
+
+;; ---------- Consumer ----------
 (defrecord KafkaMessage [topic offset partition key value-bytes])
 
 (defn- create-consumer-config
@@ -39,17 +41,15 @@
     (ConsumerConfig. props)))
 
 (defn- consume-messages
-  "Continually consume messages from Kafka topic and write message value to stdout."
+  "Continually consume messages from a Kafka topic and write message value to stdout."
   [stream thread-num]
   (let [it (.iterator ^KafkaStream stream)]
-    (println (str "Starting thread" thread-num))
+    (println (str "Starting thread " thread-num))
     (while (.hasNext it)
       (as-> (.next it) msg
-        (KafkaMessage. (.topic msg) (.offset msg) (.partition msg) (.key msg) (.message
-                                                                               msg))
-        (println (str "Received on thread " thread-num ": " (String. (:value-bytes
-                                                                      msg)))))))
-  (println (str "Stopping thread " thread-num)))
+        (KafkaMessage. (.topic msg) (.offset msg) (.partition msg) (.key msg) (.message msg))
+        (println (str "Received on thread " thread-num ": " (String. (:value-bytes msg))))))
+    (println (str "Stopping thread " thread-num))))
 
 (defn- start-consumer-threads
   "Start a thread for each stream."
@@ -61,7 +61,8 @@
       (recur (rest streams) (inc index)))))
 
 
-;;application code
+;; ---------- Application ----------
+;; $ lein trampoline run random_numbers 2
 (defn -main
   "Pull messages from a Kafka topic using the High Level Consumer"
   [topic num-threads]
